@@ -5,7 +5,6 @@ load_dotenv()
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-NGROK_AUTH_TOKEN = os.getenv('NGROK_AUTH_TOKEN')
 ADMISSIONS_CHAT_ID = os.getenv('ADMISSIONS_CHAT_ID')
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME', '@oxbridge_news')
 CHANNEL_LINK = os.getenv('CHANNEL_LINK', 'https://t.me/oxbridge_news')
