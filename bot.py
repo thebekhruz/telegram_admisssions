@@ -952,7 +952,6 @@ async def forward_to_kommo_chat(update: Update, context: ContextTypes.DEFAULT_TY
 async def webhook_server(application: Application):
     """Run aiohttp server for amoCRM webhooks"""
     from aiohttp import web
-    from pyngrok import ngrok
     import json
 
     async def handle_webhook(request):
@@ -1000,22 +999,23 @@ async def webhook_server(application: Application):
     app = web.Application()
     app.router.add_post('/kommo-webhook', handle_webhook)
     
-    # Start ngrok
-    port = 8000
-    
-    # Authenticate ngrok
-    ngrok_token = config.NGROK_AUTH_TOKEN
-    if ngrok_token:
-        ngrok.set_auth_token(ngrok_token)
-        
-    public_url = ngrok.connect(port).public_url
-    logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
-    logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
-    
+    port = config.PORT
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, 'localhost', port)
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+
+    public_base = config.PUBLIC_BASE_URL
+    if public_base:
+        logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_base}/kommo-webhook")
+    else:
+        from pyngrok import ngrok
+        ngrok_token = config.NGROK_AUTH_TOKEN
+        if ngrok_token:
+            ngrok.set_auth_token(ngrok_token)
+        public_url = ngrok.connect(port).public_url
+        logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
+        logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
 
 
 async def post_init(application: Application):

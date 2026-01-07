@@ -21,6 +21,9 @@ AMOCRM_PIPELINE_ID = int(os.getenv('AMOCRM_PIPELINE_ID', 0))
 AMOCRM_STATUS_ID = int(os.getenv('AMOCRM_STATUS_ID', 0))
 AMOCRM_API_URL = f"https://{AMOCRM_SUBDOMAIN}.{AMOCRM_DOMAIN}/api/v4"
 
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL')
+PORT = int(os.getenv('PORT', '8000'))
+
 # Campus Info
 CAMPUSES = {
     'mu': {
