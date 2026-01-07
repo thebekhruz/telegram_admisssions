@@ -5,7 +5,6 @@
 # Database and cache
 bot.db
 bot_data.json
-.token_cache
 
 # Python
 __pycache__/
