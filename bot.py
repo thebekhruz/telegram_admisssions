@@ -1,6 +1,11 @@
 import logging
 import re
+import asyncio
 from datetime import datetime, timedelta
+try:
+    from aiohttp import web
+except Exception:
+    web = None
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -1028,6 +1033,9 @@ async def telegram_webhook_handler(request):
 
 async def start_kommo_server(application: Application):
     """Run aiohttp server for amoCRM webhooks (Dev/Polling Mode)"""
+    if web is None:
+        logger.warning("aiohttp not available on Windows dev environment; skipping Kommo webhook server")
+        return
     app = web.Application()
     app['bot_app'] = application
     app.router.add_post('/kommo-webhook', kommo_webhook_handler)
@@ -1063,6 +1071,9 @@ async def start_kommo_server(application: Application):
 
 async def run_webhook_mode():
     """Run bot in Webhook mode (Production)"""
+    if web is None:
+        logger.error("aiohttp is required for webhook mode; ensure it is installed in production")
+        return
     # Create application
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
