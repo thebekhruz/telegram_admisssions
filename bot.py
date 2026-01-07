@@ -383,12 +383,29 @@ async def enrollment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     chat_id = update.effective_chat.id
     lang = get_user_lang(chat_id)
+    user = db.get_user(chat_id)
+    if user and user.get('state') == 'submitting_lead':
+        return
 
     enrollment = query.data.split('enroll_')[1] # this_sem, next_year, exploring
     db.set_user_data(chat_id, 'enrollment', enrollment)
 
     # Feature 4: Handoff to Admissions
     # Create lead in Kommo
+    existing_lead = db.get_lead(chat_id)
+    if existing_lead:
+        handoff_text = t('handoff', lang, phone=config.CONTACT_PHONE)
+        keyboard = [[InlineKeyboardButton(
+            '📢 ' + t('menu_buttons.channel', lang),
+            url=config.CHANNEL_LINK
+        )]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(handoff_text, reply_markup=reply_markup)
+        db.set_user_state(chat_id, 'ready')
+        return
+
+    db.set_user_state(chat_id, 'submitting_lead')
+
     phone = db.get_user_data(chat_id, 'phone')
     name = db.get_user_data(chat_id, 'name', 'Unknown')
     contact_id = db.get_user_data(chat_id, 'contact_id')
