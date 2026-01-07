@@ -1026,13 +1026,16 @@ async def webhook_server(application: Application):
     if public_base:
         logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_base}/kommo-webhook")
     else:
-        from pyngrok import ngrok
-        ngrok_token = config.NGROK_AUTH_TOKEN
-        if ngrok_token:
-            ngrok.set_auth_token(ngrok_token)
-        public_url = ngrok.connect(port).public_url
-        logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
-        logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
+        try:
+            from pyngrok import ngrok
+            ngrok_token = config.NGROK_AUTH_TOKEN
+            if ngrok_token:
+                ngrok.set_auth_token(ngrok_token)
+            public_url = ngrok.connect(port).public_url
+            logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
+            logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
+        except Exception as e:
+            logger.warning(f"Ngrok unavailable or failed: {e}. Set PUBLIC_BASE_URL to use a permanent domain.")
 
 
 async def post_init(application: Application):
