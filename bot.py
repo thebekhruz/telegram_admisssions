@@ -966,55 +966,71 @@ async def forward_to_kommo_chat(update: Update, context: ContextTypes.DEFAULT_TY
     if not success:
         logger.error(f"Failed to add note for lead {lead['lead_id']}")
 
-async def webhook_server(application: Application):
-    """Run aiohttp server for amoCRM webhooks"""
-    from aiohttp import web
-    import json
+async def kommo_webhook_handler(request):
+    """Handle incoming webhooks from amoCRM"""
+    application = request.app.get('bot_app')
+    if not application:
+        return web.Response(status=500, text="Bot app not initialized")
 
-    async def handle_webhook(request):
-        try:
-            # Read raw body (consume stream)
-            await request.read()
-            
-            # Parse post data
-            data = await request.post()
-            
-            # Iterate keys to find note text
-            for key in data.keys():
-                # We look for keys like 'leads[note][0][note][text]'
-                # The raw key string contains the full path
-                if 'note' in key and '[text]' in key:
-                    note_text = data[key]
+    try:
+        # Read raw body (consume stream)
+        await request.read()
+        
+        # Parse post data
+        data = await request.post()
+        
+        # Iterate keys to find note text
+        for key in data.keys():
+            # We look for keys like 'leads[note][0][note][text]'
+            if 'note' in key and '[text]' in key:
+                note_text = data[key]
+                
+                # Check for manager reply prefix
+                if note_text.startswith('>>>') or note_text.startswith('!'):
+                    reply_text = note_text[3:].strip() if note_text.startswith('>>>') else note_text[1:].strip()
                     
-                    # Check for manager reply prefix
-                    if note_text.startswith('>>>') or note_text.startswith('!'):
-                        reply_text = note_text[3:].strip() if note_text.startswith('>>>') else note_text[1:].strip()
-                        
-                        # Find corresponding element_id (Lead ID)
-                        # Replace [text] with [element_id] in the key
-                        # Example key: leads[note][0][note][text]
-                        # Target key: leads[note][0][note][element_id]
-                        lead_id_key = key.replace('[text]', '[element_id]')
-                        lead_id = data.get(lead_id_key)
-                        
-                        if lead_id:
-                             logger.info(f"Found reply for Lead {lead_id}: {reply_text}")
-                             chat_id = db.get_chat_id_by_lead(int(lead_id))
-                             
-                             if chat_id:
-                                 await application.bot.send_message(chat_id=chat_id, text=reply_text)
-                                 logger.info(f"Sent reply to Chat {chat_id}")
-                                 return web.Response(text="OK")
-                             else:
-                                 logger.warning(f"Chat ID not found for Lead {lead_id}")
+                    # Find corresponding element_id (Lead ID)
+                    lead_id_key = key.replace('[text]', '[element_id]')
+                    lead_id = data.get(lead_id_key)
+                    
+                    if lead_id:
+                            logger.info(f"Found reply for Lead {lead_id}: {reply_text}")
+                            chat_id = db.get_chat_id_by_lead(int(lead_id))
+                            
+                            if chat_id:
+                                await application.bot.send_message(chat_id=chat_id, text=reply_text)
+                                logger.info(f"Sent reply to Chat {chat_id}")
+                                return web.Response(text="OK")
+                            else:
+                                logger.warning(f"Chat ID not found for Lead {lead_id}")
 
-            return web.Response(text="OK")
-        except Exception as e:
-            logger.error(f"Webhook error: {e}")
-            return web.Response(status=500)
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return web.Response(status=500)
 
+
+async def telegram_webhook_handler(request):
+    """Handle incoming Telegram updates"""
+    application = request.app.get('bot_app')
+    if not application:
+        return web.Response(status=500, text="Bot app not initialized")
+
+    try:
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
+        await application.update_queue.put(update)
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Telegram webhook error: {e}")
+        return web.Response(status=500)
+
+
+async def start_kommo_server(application: Application):
+    """Run aiohttp server for amoCRM webhooks (Dev/Polling Mode)"""
     app = web.Application()
-    app.router.add_post('/kommo-webhook', handle_webhook)
+    app['bot_app'] = application
+    app.router.add_post('/kommo-webhook', kommo_webhook_handler)
     
     port = config.PORT
     runner = web.AppRunner(app)
@@ -1022,9 +1038,16 @@ async def webhook_server(application: Application):
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
+    # In dev mode, we might use ngrok if no public base url is set
+    # But if public base url IS set in dev mode (e.g. testing with fixed url), we use it.
+    # However, this function is only called in polling mode.
+    
+    # If we are in polling mode, we usually don't have a public base url for the bot,
+    # but we might have one for Kommo.
+    
     public_base = config.PUBLIC_BASE_URL
     if public_base:
-        logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_base}/kommo-webhook")
+        logger.info(f"👉 Set this URL in amoCRM: {public_base}/kommo-webhook")
     else:
         try:
             from pyngrok import ngrok
@@ -1033,25 +1056,15 @@ async def webhook_server(application: Application):
                 ngrok.set_auth_token(ngrok_token)
             public_url = ngrok.connect(port).public_url
             logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
-            logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
+            logger.info(f"👉 Set this URL in amoCRM: {public_url}/kommo-webhook")
         except Exception as e:
-            logger.warning(f"Ngrok unavailable or failed: {e}. Set PUBLIC_BASE_URL to use a permanent domain.")
+            logger.warning(f"Ngrok unavailable: {e}. Set PUBLIC_BASE_URL to use a permanent domain.")
 
 
-async def post_init(application: Application):
-    """Setup scheduler and webhook server after application start"""
-    scheduler = setup_scheduler(application.bot)
-    scheduler.start()
-    logger.info("Scheduler started")
-    
-    # Start webhook server for Chat API
-    await webhook_server(application)
-
-
-def main():
-    """Start the bot"""
+async def run_webhook_mode():
+    """Run bot in Webhook mode (Production)"""
     # Create application
-    application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -1059,9 +1072,76 @@ def main():
     application.add_handler(CallbackQueryHandler(callback_router))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # Start bot
-    logger.info("Bot started with automated reminders enabled")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Initialize
+    await application.initialize()
+    await application.start()
+    
+    # Setup Scheduler
+    scheduler = setup_scheduler(application.bot)
+    scheduler.start()
+    logger.info("Scheduler started")
+
+    # Set Webhook
+    webhook_url = f"{config.PUBLIC_BASE_URL}/telegram-webhook"
+    logger.info(f"Setting webhook to: {webhook_url}")
+    await application.bot.set_webhook(webhook_url)
+
+    # Setup Web Server
+    app = web.Application()
+    app['bot_app'] = application
+    app.router.add_post('/kommo-webhook', kommo_webhook_handler)
+    app.router.add_post('/telegram-webhook', telegram_webhook_handler)
+
+    logger.info(f"👉 Set this URL in amoCRM: {config.PUBLIC_BASE_URL}/kommo-webhook")
+    
+    # Run server (Blocking)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', config.PORT)
+    await site.start()
+    
+    logger.info(f"🚀 Webhook server started on port {config.PORT}")
+    
+    # Keep alive
+    stop_event = asyncio.Event()
+    await stop_event.wait()
+    
+    # Cleanup (unreachable in this simple loop unless cancelled)
+    await application.stop()
+    await application.shutdown()
+
+
+async def post_init(application: Application):
+    """Setup scheduler and webhook server after application start (Polling Mode)"""
+    scheduler = setup_scheduler(application.bot)
+    scheduler.start()
+    logger.info("Scheduler started")
+    
+    # Start webhook server for Chat API
+    await start_kommo_server(application)
+
+
+def main():
+    """Start the bot"""
+    if config.PUBLIC_BASE_URL:
+        # Production / Webhook Mode
+        try:
+            asyncio.run(run_webhook_mode())
+        except KeyboardInterrupt:
+            pass
+    else:
+        # Dev / Polling Mode
+        application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+
+        # Add handlers
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("menu", menu_command))
+        application.add_handler(CallbackQueryHandler(callback_router))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+        # Start bot
+        logger.info("Bot started in POLLING mode")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':
