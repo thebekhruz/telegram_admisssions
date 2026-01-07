@@ -7,6 +7,7 @@ try:
 except Exception:
     web = None
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -32,6 +33,13 @@ logger = logging.getLogger(__name__)
 # Initialize Kommo API
 kommo = KommoAPI()
 
+async def safe_edit(query, text, reply_markup=None):
+    try:
+        await query.edit_message_text(text, reply_markup=reply_markup)
+    except BadRequest as e:
+        if 'Message is not modified' in str(e):
+            return
+        raise
 
 # Utility functions
 def get_user_lang(chat_id: int) -> str:
@@ -405,7 +413,7 @@ async def enrollment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             url=config.CHANNEL_LINK
         )]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(handoff_text, reply_markup=reply_markup)
+        await safe_edit(query, handoff_text, reply_markup)
         db.set_user_state(chat_id, 'ready')
         return
 
@@ -459,8 +467,7 @@ async def enrollment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         url=config.CHANNEL_LINK
     )]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(handoff_text, reply_markup=reply_markup)
+    await safe_edit(query, handoff_text, reply_markup)
 
     # Set user to ready state
     db.set_user_state(chat_id, 'ready')
