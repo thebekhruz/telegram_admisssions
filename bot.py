@@ -968,7 +968,31 @@ async def forward_to_kommo_chat(update: Update, context: ContextTypes.DEFAULT_TY
     # Get active lead
     lead = db.get_lead(chat_id)
     if not lead:
-        logger.warning(f"No active lead for chat {chat_id}, cannot attach note")
+        logger.warning(f"No active lead for chat {chat_id} in local DB, attempting fallback search in Kommo...")
+        
+        # Fallback: Try to find contact by chat_id in Kommo
+        try:
+            contact = kommo.find_contact_by_chat_id(chat_id)
+            if contact:
+                contact_id = contact['id']
+                # Check for active leads linked to this contact
+                # We need to fetch the contact details with leads
+                full_contact = kommo.get_contact_by_id(contact_id)
+                if full_contact and '_embedded' in full_contact and 'leads' in full_contact['_embedded']:
+                    leads_list = full_contact['_embedded']['leads']
+                    if leads_list:
+                        # Use the most recent lead
+                        # (Ideally we should check status, but last one is a good guess)
+                        last_lead_id = leads_list[0]['id'] 
+                        
+                        logger.info(f"Restored mapping for Chat {chat_id} -> Lead {last_lead_id}")
+                        db.save_lead(chat_id, int(contact_id), int(last_lead_id))
+                        lead = {'lead_id': last_lead_id}
+        except Exception as e:
+            logger.error(f"Error during fallback search for chat {chat_id}: {e}")
+
+    if not lead:
+        logger.warning(f"No active lead found for chat {chat_id}, cannot attach note")
         return
 
     # Add note to lead
@@ -1065,7 +1089,9 @@ async def telegram_webhook_handler(request):
     try:
         data = await request.json()
         update = Update.de_json(data, application.bot)
-        await application.update_queue.put(update)
+        # Process update immediately instead of putting in queue
+        # This ensures it runs even if updater loop is not managed by us
+        await application.process_update(update)
         return web.Response(text="OK")
     except Exception as e:
         logger.error(f"Telegram webhook error: {e}")

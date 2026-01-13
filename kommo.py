@@ -105,6 +105,39 @@ class KommoAPI:
             logger.error(f"Error finding contact: {e}")
             return None
 
+    def find_contact_by_chat_id(self, chat_id: int) -> Optional[Dict]:
+        """Find contact in amoCRM by Telegram chat ID"""
+        try:
+            # Search by chat_id (assuming it's indexed in query)
+            response = self._make_request('GET', 'contacts', params={'query': str(chat_id)})
+            response.raise_for_status()
+
+            data = response.json()
+            if data.get('_embedded', {}).get('contacts'):
+                # We might get multiple results, need to verify the custom field 995929
+                contacts = data['_embedded']['contacts']
+                for contact in contacts:
+                    # Need to fetch full details to check custom fields? 
+                    # Search results usually include custom fields but let's be safe.
+                    # The search list usually contains custom_fields_values
+                    if 'custom_fields_values' in contact:
+                        for field in contact['custom_fields_values']:
+                            if field['field_id'] == 995929: # Telegram ID
+                                if str(field['values'][0]['value']) == str(chat_id):
+                                    return contact
+                                    
+                # If checking search results wasn't enough (e.g. no custom fields in list),
+                # we might need to fetch individual contacts, but that's expensive.
+                # Let's hope the first match is correct if the query was specific.
+                # Or return the first one as best guess?
+                # Better to return None if not sure.
+                pass
+                
+            return None
+        except Exception as e:
+            logger.error(f"Error finding contact by chat_id: {e}")
+            return None
+
     def create_or_update_contact(self, phone: str, name: str = None,
                                   chat_id: int = None, username: str = None, language: str = None) -> Optional[int]:
         """Create or update contact in amoCRM"""
