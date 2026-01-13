@@ -1010,11 +1010,45 @@ async def kommo_webhook_handler(request):
                             chat_id = db.get_chat_id_by_lead(int(lead_id))
                             
                             if chat_id:
-                                await application.bot.send_message(chat_id=chat_id, text=reply_text)
-                                logger.info(f"Sent reply to Chat {chat_id}")
-                                return web.Response(text="OK")
-                            else:
-                                logger.warning(f"Chat ID not found for Lead {lead_id}")
+                                try:
+                                    await application.bot.send_message(chat_id=chat_id, text=reply_text)
+                                    logger.info(f"Sent reply to Chat {chat_id}")
+                                    return web.Response(text="OK")
+                                except Exception as e:
+                                    logger.error(f"Failed to send to cached chat {chat_id}: {e}")
+                            
+                            # Fallback: Fetch from Kommo if local DB misses it or failed
+                            logger.info(f"Attempting to fetch Chat ID from Kommo for Lead {lead_id}")
+                            try:
+                                lead_data = kommo.get_lead_by_id(int(lead_id))
+                                if lead_data and '_embedded' in lead_data and 'contacts' in lead_data['_embedded']:
+                                    contacts = lead_data['_embedded']['contacts']
+                                    if contacts:
+                                        contact_id = contacts[0]['id']
+                                        contact_data = kommo.get_contact_by_id(contact_id)
+                                        
+                                        if contact_data and 'custom_fields_values' in contact_data:
+                                            # Look for field 995929 (Telegram ID)
+                                            for field in contact_data['custom_fields_values']:
+                                                if field['field_id'] == 995929:
+                                                    chat_id_val = field['values'][0]['value']
+                                                    try:
+                                                        chat_id = int(chat_id_val)
+                                                        # Update local DB
+                                                        db.save_lead(chat_id, int(contact_id), int(lead_id))
+                                                        
+                                                        # Send message
+                                                        await application.bot.send_message(chat_id=chat_id, text=reply_text)
+                                                        logger.info(f"Sent reply to Chat {chat_id} (Fetched from Kommo)")
+                                                        return web.Response(text="OK")
+                                                    except ValueError:
+                                                        logger.error(f"Invalid Chat ID format in Kommo: {chat_id_val}")
+                                                    except Exception as e:
+                                                        logger.error(f"Failed to send to fetched chat {chat_id}: {e}")
+                            except Exception as e:
+                                logger.error(f"Error in fallback logic: {e}")
+
+                            logger.warning(f"Chat ID not found for Lead {lead_id}")
 
         return web.Response(text="OK")
     except Exception as e:
@@ -1065,7 +1099,9 @@ async def start_kommo_server(application: Application):
         logger.info(f"👉 Set this URL in amoCRM: {public_base}/kommo-webhook")
     else:
         try:
-            from pyngrok import ngrok
+            import importlib
+            ngrok_module = importlib.import_module('pyngrok')
+            ngrok = getattr(ngrok_module, 'ngrok')
             ngrok_token = config.NGROK_AUTH_TOKEN
             if ngrok_token:
                 ngrok.set_auth_token(ngrok_token)

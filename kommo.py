@@ -502,3 +502,27 @@ class KommoAPI:
             return calculated.lower() == signature.lower()
         except Exception:
             return False
+
+    def get_lead_by_id(self, lead_id: int) -> Optional[Dict]:
+        """Get lead details by ID, including contacts"""
+        try:
+            response = self._make_request('GET', f'leads/{lead_id}', params={'with': 'contacts'})
+            if response.status_code == 204:
+                return None
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error getting lead {lead_id}: {e}")
+            return None
+
+    def get_contact_by_id(self, contact_id: int) -> Optional[Dict]:
+        """Get contact details by ID"""
+        try:
+            response = self._make_request('GET', f'contacts/{contact_id}')
+            if response.status_code == 204:
+                return None
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error getting contact {contact_id}: {e}")
+            return None
