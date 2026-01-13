@@ -835,11 +835,6 @@ async def handle_text_or_contact(update: Update, context: ContextTypes.DEFAULT_T
     if not user:
         return
 
-    # If message is not part of flow, treat as chat message
-    if user.get('state') == 'ready':
-        # Removed forward_to_kommo_chat
-        return
-
     # Handle Name Input
     if user.get('state') == 'awaiting_name':
         await handle_name(update, context)
