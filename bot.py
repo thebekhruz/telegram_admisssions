@@ -189,10 +189,18 @@ async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Create contact button
     lang = user['language']
-    contact_btn = KeyboardButton(text=t('share_contact', lang), request_contact=True)
+    try:
+        contact_text = t('share_contact', lang)
+        welcome_text = t('welcome', lang)
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        contact_text = "📱 Share contact"
+        welcome_text = "Please share your phone number"
+
+    contact_btn = KeyboardButton(text=contact_text, request_contact=True)
     reply_markup = ReplyKeyboardMarkup([[contact_btn]], one_time_keyboard=True, resize_keyboard=True)
     
-    await update.message.reply_text(t('welcome', user['language']), reply_markup=reply_markup)
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
 # Feature 2: Phone Capture + Kommo Sync
