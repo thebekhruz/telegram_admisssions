@@ -1025,6 +1025,9 @@ async def kommo_webhook_handler(request):
         # Parse post data
         data = await request.post()
         
+        # Detailed logging
+        logger.info(f"Kommo Webhook Payload: {dict(data)}")
+        
         # Iterate keys to find note text
         for key in data.keys():
             # We look for keys like 'leads[note][0][note][text]'
@@ -1098,6 +1101,8 @@ async def telegram_webhook_handler(request):
 
     try:
         data = await request.json()
+        logger.info(f"Telegram Webhook Headers: {dict(request.headers)}")
+        logger.info(f"Telegram Webhook Payload: {data}")
         update = Update.de_json(data, application.bot)
         # Process update immediately instead of putting in queue
         # This ensures it runs even if updater loop is not managed by us
