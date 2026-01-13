@@ -113,6 +113,21 @@ async def stats79_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Total users: {total}")
 
 
+async def getid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /getid command - Return current chat ID"""
+    chat_id = update.effective_chat.id
+    type = update.effective_chat.type
+    title = update.effective_chat.title or "Private"
+    
+    await update.message.reply_text(
+        f"🆔 Chat Info:\n\n"
+        f"ID: `{chat_id}`\n"
+        f"Type: {type}\n"
+        f"Title: {title}",
+        parse_mode='Markdown'
+    )
+
+
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Broadcast message to all users"""
     # Check admin permission
@@ -962,6 +977,7 @@ def main():
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("stats79", stats79_command))
+    application.add_handler(CommandHandler("getid", getid_command))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CallbackQueryHandler(callback_router))
