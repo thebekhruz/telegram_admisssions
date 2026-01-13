@@ -15,10 +15,10 @@ TRANSLATIONS = {
         'tr': '📱 Kişiyi paylaş'
     },
     'welcome': {
-        'ru': '🏫 Добро пожаловать в Oxbridge International School! 👋\n\nНапишите ваш номер телефона в формате:\n+998 XX XXX XX XX',
-        'uz': '🏫 Oxbridge International Schoolga xush kelibsiz! 👋\n\nTelefon raqamingizni quyidagi formatda yozing:\n+998 XX XXX XX XX',
-        'en': '🏫 Welcome to Oxbridge International School! 👋\n\nPlease share your phone number in format:\n+998 XX XXX XX XX',
-        'tr': '🏫 Oxbridge International School\'a hoş geldiniz! 👋\n\nTelefon numaranızı şu formatta yazın:\n+998 XX XXX XX XX'
+        'ru': '🏫 Добро пожаловать в Oxbridge International School! 👋\n\nНажмите кнопку "📱 Поделиться контактом" внизу или введите номер вручную:\n+998 XX XXX XX XX',
+        'uz': '🏫 Oxbridge International Schoolga xush kelibsiz! 👋\n\nQuyidagi "📱 Kontaktni ulashish" tugmasini bosing yoki raqamingizni yozing:\n+998 XX XXX XX XX',
+        'en': '🏫 Welcome to Oxbridge International School! 👋\n\nClick the "📱 Share contact" button below or enter your number manually:\n+998 XX XXX XX XX',
+        'tr': '🏫 Oxbridge International School\'a hoş geldiniz! 👋\n\nAşağıdaki "📱 Kişiyi paylaş" butonuna tıklayın veya numaranızı manuel olarak girin:\n+998 XX XXX XX XX'
     },
     'children_count': {
         'ru': 'Сколько у вас детей?',
