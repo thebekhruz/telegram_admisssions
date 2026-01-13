@@ -821,27 +821,37 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Handle text messages (for menu shortcuts)
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages"""
-    text = update.message.text.lower()
+    text = update.message.text
+    chat_id = update.effective_chat.id
+    logger.info(f"Received text from {chat_id}: {text}")
 
     # Check for menu command
-    if text in ['меню', 'menu', 'menyu']:
+    if text.lower() in ['меню', 'menu', 'menyu']:
         await menu_command(update, context)
         return
 
     # Otherwise check state
-    chat_id = update.effective_chat.id
     user = db.get_user(chat_id)
 
     if not user:
+        # If user not found (e.g. after DB reset), assume they are an existing client
+        # Create a basic user record so we can track them
+        logger.info(f"User {chat_id} not found in DB, creating basic record and forwarding message")
+        db.create_user(chat_id)
+        # Proceed to forward message
+        await forward_to_kommo_chat(update, context)
         return
 
+    state = user.get('state')
+    logger.info(f"User {chat_id} state: {state}")
+
     # If message is not part of flow, treat as chat message
-    if user.get('state') == 'ready':
+    if state == 'ready' or state == 'start':
         await forward_to_kommo_chat(update, context)
         return
 
     # Handle Name Input
-    if user.get('state') == 'awaiting_name':
+    if state == 'awaiting_name':
         await handle_name(update, context)
         return
 
