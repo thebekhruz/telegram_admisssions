@@ -69,9 +69,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     username = update.effective_user.username
 
-    # Create user if not exists
-    if not db.get_user(chat_id):
-        db.create_user(chat_id, username=username)
+    # Create user if not exists or update info
+    db.create_user(chat_id, username=username)
 
     keyboard = [
         [
@@ -213,8 +212,10 @@ async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text = "Please share your phone number"
 
     contact_btn = KeyboardButton(text=contact_text, request_contact=True)
-    reply_markup = ReplyKeyboardMarkup([[contact_btn]], one_time_keyboard=True, resize_keyboard=True)
+    # one_time_keyboard=False to ensure it stays until valid input
+    reply_markup = ReplyKeyboardMarkup([[contact_btn]], one_time_keyboard=False, resize_keyboard=True)
     
+    logger.info(f"Sending contact request to {chat_id} with text '{contact_text}'")
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
@@ -496,7 +497,8 @@ async def notify_admissions(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     if not config.ADMISSIONS_CHAT_ID:
         return
 
-    username = db.get_user_data(chat_id, 'username')
+    user = db.get_user(chat_id)
+    username = user.get('username') if user else None
     username_text = f"@{username}" if username else "N/A"
 
     message = f"""🆕 New Lead from Telegram Bot
@@ -723,7 +725,8 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Notify admissions
     if config.ADMISSIONS_CHAT_ID:
-        username = db.get_user_data(chat_id, 'username')
+        user = db.get_user(chat_id)
+        username = user.get('username') if user else None
         username_text = f"@{username}" if username else "N/A"
 
         await context.bot.send_message(
@@ -821,7 +824,8 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = db.get_user_data(chat_id, 'phone', 'Not provided')
 
     if config.ADMISSIONS_CHAT_ID:
-        username = db.get_user_data(chat_id, 'username')
+        user = db.get_user(chat_id)
+        username = user.get('username') if user else None
         username_text = f"@{username}" if username else "N/A"
 
         await context.bot.send_message(
@@ -945,7 +949,8 @@ async def reminder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Notify admissions
         if config.ADMISSIONS_CHAT_ID:
             phone = db.get_user_data(chat_id, 'phone')
-            username = db.get_user_data(chat_id, 'username')
+            user = db.get_user(chat_id)
+            username = user.get('username') if user else None
             username_text = f"@{username}" if username else "N/A"
 
             await context.bot.send_message(
