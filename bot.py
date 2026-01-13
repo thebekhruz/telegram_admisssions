@@ -496,8 +496,12 @@ async def notify_admissions(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     if not config.ADMISSIONS_CHAT_ID:
         return
 
+    username = db.get_user_data(chat_id, 'username')
+    username_text = f"@{username}" if username else "N/A"
+
     message = f"""🆕 New Lead from Telegram Bot
 
+👤 Username: {username_text}
 📞 Phone: {phone}
 🌐 Language: {lang}
 👶 Children: {lead_data.get('children_count', 'N/A')}
@@ -719,9 +723,13 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Notify admissions
     if config.ADMISSIONS_CHAT_ID:
+        username = db.get_user_data(chat_id, 'username')
+        username_text = f"@{username}" if username else "N/A"
+
         await context.bot.send_message(
             chat_id=config.ADMISSIONS_CHAT_ID,
             text=f"📅 New Tour Booking\n\n"
+                 f"👤 Username: {username_text}\n"
                  f"Phone: {phone}\n"
                  f"Campus: {campus_name}\n"
                  f"Date: {formatted_date}\n"
@@ -813,9 +821,13 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = db.get_user_data(chat_id, 'phone', 'Not provided')
 
     if config.ADMISSIONS_CHAT_ID:
+        username = db.get_user_data(chat_id, 'username')
+        username_text = f"@{username}" if username else "N/A"
+
         await context.bot.send_message(
             chat_id=config.ADMISSIONS_CHAT_ID,
             text=f"💬 User wants to contact manager\n\n"
+                 f"👤 Username: {username_text}\n"
                  f"Phone: {phone}\n"
                  f"Chat ID: {chat_id}\n"
                  f"Language: {lang}\n"
@@ -933,9 +945,13 @@ async def reminder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Notify admissions
         if config.ADMISSIONS_CHAT_ID:
             phone = db.get_user_data(chat_id, 'phone')
+            username = db.get_user_data(chat_id, 'username')
+            username_text = f"@{username}" if username else "N/A"
+
             await context.bot.send_message(
                 chat_id=config.ADMISSIONS_CHAT_ID,
                 text=f"🔄 Tour {'Reschedule' if action == 'reschedule' else 'Cancellation'}\n\n"
+                     f"👤 Username: {username_text}\n"
                      f"Phone: {phone}\n"
                      f"Tour: {active_tour['date']} {active_tour['time']}\n"
                      f"Campus: {active_tour['campus']}"
