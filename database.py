@@ -39,14 +39,6 @@ class Tour(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-class Lead(Base):
-    __tablename__ = 'leads'
-    
-    chat_id = Column(BigInteger, primary_key=True)
-    contact_id = Column(BigInteger)
-    lead_id = Column(BigInteger)
-    created_at = Column(DateTime, default=datetime.now)
-
 class Database:
     """PostgreSQL database for bot state"""
     
@@ -200,6 +192,16 @@ class Database:
         finally:
             session.close()
 
+    def get_all_users(self) -> List[int]:
+        """Get all user chat IDs"""
+        session = self._get_session()
+        if not session: return []
+        try:
+            users = session.query(User.chat_id).all()
+            return [u[0] for u in users]
+        finally:
+            session.close()
+
     # Tour methods
     def create_tour(self, chat_id: int, phone: str, campus: str,
                     date: str, time: str, language: str) -> Dict:
@@ -347,51 +349,5 @@ class Database:
         finally:
             session.close()
 
-    # Lead methods
-    def save_lead(self, chat_id: int, contact_id: int, lead_id: int):
-        """Save lead IDs for user"""
-        session = self._get_session()
-        if not session: return
-        try:
-            lead = session.query(Lead).filter_by(chat_id=chat_id).first()
-            if not lead:
-                lead = Lead(chat_id=chat_id)
-                session.add(lead)
-            
-            lead.contact_id = contact_id
-            lead.lead_id = lead_id
-            session.commit()
-        except Exception as e:
-            logger.error(f"Error saving lead: {e}")
-            session.rollback()
-        finally:
-            session.close()
-
-    def get_lead(self, chat_id: int) -> Optional[Dict]:
-        """Get lead IDs for user"""
-        session = self._get_session()
-        if not session: return None
-        try:
-            lead = session.query(Lead).filter_by(chat_id=chat_id).first()
-            if lead:
-                return {
-                    'contact_id': lead.contact_id,
-                    'lead_id': lead.lead_id
-                }
-            return None
-        finally:
-            session.close()
-
-    def get_chat_id_by_lead(self, lead_id: int) -> Optional[int]:
-        """Get Telegram chat ID by amoCRM lead ID"""
-        session = self._get_session()
-        if not session: return None
-        try:
-            lead = session.query(Lead).filter_by(lead_id=lead_id).first()
-            return lead.chat_id if lead else None
-        finally:
-            session.close()
-
-
-# Global database instance
+    # Global database instance
 db = Database()

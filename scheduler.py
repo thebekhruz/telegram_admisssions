@@ -9,11 +9,9 @@ from apscheduler.triggers.cron import CronTrigger
 
 import config
 from database import db
-from kommo import KommoAPI
 from translations import t
 
 logger = logging.getLogger(__name__)
-kommo = KommoAPI()
 
 
 async def send_tour_reminders(bot):

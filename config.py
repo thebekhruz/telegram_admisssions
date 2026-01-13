@@ -11,19 +11,12 @@ ADMISSIONS_CHAT_ID = os.getenv('ADMISSIONS_CHAT_ID')
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME', '@oxbridge_news')
 CHANNEL_LINK = os.getenv('CHANNEL_LINK', 'https://t.me/oxbridge_news')
 
+# Admin IDs (comma separated)
+ADMIN_IDS = [int(id_str.strip()) for id_str in os.getenv('ADMIN_IDS', '').split(',') if id_str.strip()]
+
+
 # Database
 DATABASE_URL = os.getenv('DATABASE_URL')
-
-# amoCRM
-AMOCRM_SUBDOMAIN = os.getenv('AMOCRM_SUBDOMAIN')
-AMOCRM_DOMAIN = os.getenv('AMOCRM_DOMAIN', 'amocrm.ru')  # or amocrm.com
-AMOCRM_CLIENT_ID = os.getenv('AMOCRM_CLIENT_ID')
-AMOCRM_CLIENT_SECRET = os.getenv('AMOCRM_CLIENT_SECRET')
-AMOCRM_ACCESS_TOKEN = os.getenv('AMOCRM_ACCESS_TOKEN')
-AMOCRM_REFRESH_TOKEN = os.getenv('AMOCRM_REFRESH_TOKEN')
-AMOCRM_PIPELINE_ID = int(os.getenv('AMOCRM_PIPELINE_ID', 0))
-AMOCRM_STATUS_ID = int(os.getenv('AMOCRM_STATUS_ID', 0))
-AMOCRM_API_URL = f"https://{AMOCRM_SUBDOMAIN}.{AMOCRM_DOMAIN}/api/v4"
 
 # Campus Info
 CAMPUSES = {

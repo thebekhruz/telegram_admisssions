@@ -1,7 +1,14 @@
 import logging
 import re
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, 
+    InlineKeyboardButton, 
+    InlineKeyboardMarkup, 
+    KeyboardButton, 
+    ReplyKeyboardMarkup, 
+    ReplyKeyboardRemove
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,7 +20,6 @@ from telegram.ext import (
 
 import config
 from database import db
-from kommo import KommoAPI
 from translations import t, TRANSLATIONS
 from scheduler import setup_scheduler
 
@@ -23,9 +29,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Initialize Kommo API
-kommo = KommoAPI()
 
 
 # Utility functions
@@ -100,10 +103,47 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def start79_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start79 command - Return total number of users"""
+async def stats79_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /stats79 command - Return total number of users"""
+    # Check admin permission
+    if update.effective_chat.id not in config.ADMIN_IDS:
+        return
+
     total = db.get_total_users()
     await update.message.reply_text(f"Total users: {total}")
+
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Broadcast message to all users"""
+    # Check admin permission
+    if update.effective_chat.id not in config.ADMIN_IDS:
+        return
+
+    # Check if message is provided
+    if not context.args:
+        await update.message.reply_text("Usage: /broadcast <message>")
+        return
+
+    message = ' '.join(context.args)
+    users = db.get_all_users()
+    count = 0
+    failed = 0
+    
+    status_msg = await update.message.reply_text(f"🚀 Starting broadcast to {len(users)} users...")
+    
+    for chat_id in users:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=message)
+            count += 1
+        except Exception as e:
+            logger.warning(f"Failed to send to {chat_id}: {e}")
+            failed += 1
+            
+        # Update status every 50 users
+        if (count + failed) % 50 == 0:
+             await status_msg.edit_text(f"🚀 Sending... {count} sent, {failed} failed")
+    
+    await status_msg.edit_text(f"✅ Broadcast complete.\nSent: {count}\nFailed: {failed}")
 
 
 async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,7 +186,13 @@ async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Move to Phone
     db.set_user_state(chat_id, 'awaiting_phone')
-    await update.message.reply_text(t('welcome', user['language']))
+    
+    # Create contact button
+    lang = user['language']
+    contact_btn = KeyboardButton(text=t('share_contact', lang), request_contact=True)
+    reply_markup = ReplyKeyboardMarkup([[contact_btn]], one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text(t('welcome', user['language']), reply_markup=reply_markup)
 
 
 # Feature 2: Phone Capture + Kommo Sync
@@ -159,29 +205,25 @@ async def handle_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     lang = user['language']
-    phone = update.message.text.strip()
-
-    # Validate phone
-    if not validate_phone(phone):
-        await update.message.reply_text(t('invalid_phone', lang))
-        return
+    
+    # Check if contact shared
+    if update.message.contact:
+        phone = update.message.contact.phone_number
+        # Remove keyboard
+        await update.message.reply_text("✅", reply_markup=ReplyKeyboardRemove())
+    else:
+        phone = update.message.text.strip()
+        # Validate phone only if manually entered
+        if not validate_phone(phone):
+            await update.message.reply_text(t('invalid_phone', lang))
+            return
+        # Remove keyboard (in case they typed it manually but keyboard was shown)
+        await update.message.reply_text("✅", reply_markup=ReplyKeyboardRemove())
 
     phone = normalize_phone(phone)
 
     # Save to database
     db.set_user_data(chat_id, 'phone', phone)
-
-    # Sync with Kommo
-    contact_id = kommo.create_or_update_contact(
-        phone=phone,
-        chat_id=chat_id,
-        username=update.effective_user.username,
-        language=lang,
-        name=user.get('name')  # Pass name to save in Contact too
-    )
-
-    if contact_id:
-        db.set_user_data(chat_id, 'contact_id', contact_id)
 
     # Move to Feature 3: Basic Qualification
     db.set_user_state(chat_id, 'awaiting_children_count')
@@ -395,11 +437,10 @@ async def enrollment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     db.set_user_data(chat_id, 'enrollment', enrollment)
 
     # Feature 4: Handoff to Admissions
-    # Create lead in Kommo
+    # Notify admissions
     phone = db.get_user_data(chat_id, 'phone')
     name = db.get_user_data(chat_id, 'name', 'Unknown')
-    contact_id = db.get_user_data(chat_id, 'contact_id')
-
+    
     lead_data = {
         'name': name,
         'children_count': db.get_user_data(chat_id, 'children_count'),
@@ -408,33 +449,8 @@ async def enrollment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         'enrollment': enrollment
     }
 
-    # Update contact name first if needed
-    if contact_id:
-        kommo.update_contact_name(contact_id, name)
-
-    lead_id = kommo.create_lead(contact_id, phone, lead_data)
-
-    if lead_id:
-        db.save_lead(chat_id, contact_id, lead_id)
-
-        # Create task for admissions with summary
-        summary = (
-            f"New lead from Telegram - Call within 1 hour\n"
-            f"Name: {name}\n"
-            f"Phone: {phone}\n"
-            f"Language: {lang}\n"
-            f"Children: {lead_data['children_count']} ({', '.join(lead_data['children_ages'])})\n"
-            f"Program: {lead_data['program']}\n"
-            f"Enrollment: {enrollment}"
-        )
-        
-        # Add summary as a note too
-        kommo.add_note(lead_id, f"📝 LEAD SUMMARY:\n{summary}")
-        
-        kommo.create_task(lead_id, summary)
-
-        # Notify admissions
-        await notify_admissions(context, chat_id, phone, lang, lead_data)
+    # Notify admissions
+    await notify_admissions(context, chat_id, phone, lang, lead_data)
 
     # Send handoff message with channel
     handoff_text = t('handoff', lang, phone=config.CONTACT_PHONE)
@@ -644,16 +660,6 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tour = db.create_tour(chat_id, phone, campus, date, time, lang)
 
-    # Update Kommo
-    lead = db.get_lead(chat_id)
-    if lead:
-        kommo.update_lead(lead['lead_id'], {
-            'tour_campus': campus,
-            'tour_date': date,
-            'tour_time': time,
-            'tour_status': 'booked'
-        })
-
     # Send confirmation
     campus_info = config.CAMPUSES[campus]
     campus_name = campus_info['name'][lang]
@@ -797,9 +803,17 @@ async def contact_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Handle text messages (for menu shortcuts)
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages"""
-    text = update.message.text.lower()
+async def handle_text_or_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text messages or contact sharing"""
+    # Check if it's a contact
+    if update.message.contact:
+        chat_id = update.effective_chat.id
+        user = db.get_user(chat_id)
+        if user and user.get('state') == 'awaiting_phone':
+            await handle_phone(update, context)
+        return
+
+    text = update.message.text.lower() if update.message.text else ""
 
     # Check for menu command
     if text in ['меню', 'menu', 'menyu']:
@@ -815,7 +829,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # If message is not part of flow, treat as chat message
     if user.get('state') == 'ready':
-        await forward_to_kommo_chat(update, context)
+        # Removed forward_to_kommo_chat
         return
 
     # Handle Name Input
@@ -924,109 +938,17 @@ async def admin_status_callback(update: Update, context: ContextTypes.DEFAULT_TY
     # Update tour status
     db.update_tour(tour_id, status=status)
 
-    # Update in Kommo
-    tour = db.get_tour(tour_id)
-    if tour:
-        lead = db.get_lead(tour['chat_id'])
-        if lead:
-            kommo.update_lead(lead['lead_id'], {'tour_status': status})
-
     await query.edit_message_text(
         f"✅ Tour status updated to: {status}\n\n"
         f"{query.message.text}"
     )
 
 
-async def forward_to_kommo_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Forward user message to amoCRM as a note"""
-    chat_id = update.effective_chat.id
-    text = update.message.text
-    user_name = update.effective_user.full_name
-    
-    # Get active lead
-    lead = db.get_lead(chat_id)
-    if not lead:
-        logger.warning(f"No active lead for chat {chat_id}, cannot attach note")
-        return
-
-    # Add note to lead
-    note_text = f"📩 Сообщение от {user_name} (Telegram):\n{text}"
-    success = kommo.add_note(lead['lead_id'], note_text)
-    
-    if not success:
-        logger.error(f"Failed to add note for lead {lead['lead_id']}")
-
-async def webhook_server(application: Application):
-    """Run aiohttp server for amoCRM webhooks"""
-    from aiohttp import web
-    import json
-
-    async def handle_webhook(request):
-        try:
-            # Read raw body (consume stream)
-            await request.read()
-            
-            # Parse post data
-            data = await request.post()
-            
-            # Iterate keys to find note text
-            for key in data.keys():
-                # We look for keys like 'leads[note][0][note][text]'
-                # The raw key string contains the full path
-                if 'note' in key and '[text]' in key:
-                    note_text = data[key]
-                    
-                    # Check for manager reply prefix
-                    if note_text.startswith('>>>') or note_text.startswith('!'):
-                        reply_text = note_text[3:].strip() if note_text.startswith('>>>') else note_text[1:].strip()
-                        
-                        # Find corresponding element_id (Lead ID)
-                        # Replace [text] with [element_id] in the key
-                        # Example key: leads[note][0][note][text]
-                        # Target key: leads[note][0][note][element_id]
-                        lead_id_key = key.replace('[text]', '[element_id]')
-                        lead_id = data.get(lead_id_key)
-                        
-                        if lead_id:
-                             logger.info(f"Found reply for Lead {lead_id}: {reply_text}")
-                             chat_id = db.get_chat_id_by_lead(int(lead_id))
-                             
-                             if chat_id:
-                                 await application.bot.send_message(chat_id=chat_id, text=reply_text)
-                                 logger.info(f"Sent reply to Chat {chat_id}")
-                                 return web.Response(text="OK")
-                             else:
-                                 logger.warning(f"Chat ID not found for Lead {lead_id}")
-
-            return web.Response(text="OK")
-        except Exception as e:
-            logger.error(f"Webhook error: {e}")
-            return web.Response(status=500)
-
-    app = web.Application()
-    app.router.add_post('/kommo-webhook', handle_webhook)
-    
-    # Use configured port
-    port = config.PORT
-    
-    # Log webhook URL
-    logger.info(f"🚀 Webhook Server Starting on port {port}")
-    logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {config.WEBHOOK_URL}")
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-
-
 async def post_init(application: Application):
-    """Setup scheduler and webhook server after application start"""
+    """Setup scheduler after application start"""
     scheduler = setup_scheduler(application.bot)
     scheduler.start()
     logger.info("Scheduler started")
-    
-    # Start webhook server for Chat API
-    await webhook_server(application)
 
 
 def main():
@@ -1036,10 +958,11 @@ def main():
 
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("start79", start79_command))
+    application.add_handler(CommandHandler("stats79", stats79_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CallbackQueryHandler(callback_router))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), handle_text_or_contact))
 
     # Start bot
     logger.info("Bot started with automated reminders enabled")

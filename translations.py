@@ -8,6 +8,12 @@ TRANSLATIONS = {
             'tr': '🇹🇷 Türkçe'
         }
     },
+    'share_contact': {
+        'ru': '📱 Поделиться контактом',
+        'uz': '📱 Kontaktni ulashish',
+        'en': '📱 Share contact',
+        'tr': '📱 Kişiyi paylaş'
+    },
     'welcome': {
         'ru': '🏫 Добро пожаловать в Oxbridge International School! 👋\n\nНапишите ваш номер телефона в формате:\n+998 XX XXX XX XX',
         'uz': '🏫 Oxbridge International Schoolga xush kelibsiz! 👋\n\nTelefon raqamingizni quyidagi formatda yozing:\n+998 XX XXX XX XX',
