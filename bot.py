@@ -64,10 +64,11 @@ def normalize_phone(phone: str) -> str:
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command - Show language selection"""
     chat_id = update.effective_chat.id
+    username = update.effective_user.username
 
     # Create user if not exists
     if not db.get_user(chat_id):
-        db.create_user(chat_id)
+        db.create_user(chat_id, username=username)
 
     keyboard = [
         [
@@ -97,6 +98,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         TRANSLATIONS['language_selection']['text'],
         reply_markup=reply_markup
     )
+
+
+async def start79_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start79 command - Return total number of users"""
+    total = db.get_total_users()
+    await update.message.reply_text(f"Total users: {total}")
 
 
 async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -952,7 +959,6 @@ async def forward_to_kommo_chat(update: Update, context: ContextTypes.DEFAULT_TY
 async def webhook_server(application: Application):
     """Run aiohttp server for amoCRM webhooks"""
     from aiohttp import web
-    from pyngrok import ngrok
     import json
 
     async def handle_webhook(request):
@@ -1000,21 +1006,16 @@ async def webhook_server(application: Application):
     app = web.Application()
     app.router.add_post('/kommo-webhook', handle_webhook)
     
-    # Start ngrok
-    port = 8000
+    # Use configured port
+    port = config.PORT
     
-    # Authenticate ngrok
-    ngrok_token = config.NGROK_AUTH_TOKEN
-    if ngrok_token:
-        ngrok.set_auth_token(ngrok_token)
-        
-    public_url = ngrok.connect(port).public_url
-    logger.info(f"🚀 Ngrok Tunnel Started: {public_url}")
-    logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {public_url}/kommo-webhook")
+    # Log webhook URL
+    logger.info(f"🚀 Webhook Server Starting on port {port}")
+    logger.info(f"👉 Set this URL in amoCRM (Custom Integration -> Webhook): {config.WEBHOOK_URL}")
     
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, 'localhost', port)
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
 
@@ -1035,6 +1036,7 @@ def main():
 
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("start79", start79_command))
     application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CallbackQueryHandler(callback_router))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

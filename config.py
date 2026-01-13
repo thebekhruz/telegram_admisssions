@@ -5,10 +5,14 @@ load_dotenv()
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-NGROK_AUTH_TOKEN = os.getenv('NGROK_AUTH_TOKEN')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://telegramadmisssions-test.up.railway.app/kommo-webhook')
+PORT = int(os.getenv('PORT', 8000))
 ADMISSIONS_CHAT_ID = os.getenv('ADMISSIONS_CHAT_ID')
 CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME', '@oxbridge_news')
 CHANNEL_LINK = os.getenv('CHANNEL_LINK', 'https://t.me/oxbridge_news')
+
+# Database
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 # amoCRM
 AMOCRM_SUBDOMAIN = os.getenv('AMOCRM_SUBDOMAIN')
